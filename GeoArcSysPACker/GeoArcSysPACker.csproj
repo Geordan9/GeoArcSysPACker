@@ -61,6 +61,12 @@
     <None Include="App.config" />
     <None Include="packages.config" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\lib\ArcSysAPI\ArcSysAPI\ArcSysAPI.csproj">
+      <Project>{78146821-fbc1-43af-b515-be2822cbbcbb}</Project>
+      <Name>ArcSysAPI</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <DisableFody Condition="'$(Configuration)' == 'Debug'">true</DisableFody>
