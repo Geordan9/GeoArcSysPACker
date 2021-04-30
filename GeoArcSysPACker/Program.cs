@@ -2,8 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using ArcSysAPI.Models;
-using GeoArcSysPACker.Utils;
+using GeoArcSysPACker.Models;
 using GeoArcSysPACker.Utils.Extensions;
 
 namespace GeoArcSysPACker
@@ -11,23 +12,61 @@ namespace GeoArcSysPACker
     internal class Program
     {
         [Flags]
-        public enum OptionParams
+        public enum Options
         {
             Recursive = 0x1,
             NameID = 0x2,
             NameIDExt = 0x4
         }
 
+        public static ConsoleOption[] ConsoleOptions =
+        {
+            new ConsoleOption
+            {
+                Name = "Recursive",
+                ShortOp = "-r",
+                LongOp = "--recursive",
+                Description =
+                    "Specifies, if the tool is unpacking, to look through every \n\t\t\tfolder, from the parent, recursively.",
+                Flag = Options.Recursive
+            },
+            new ConsoleOption
+            {
+                Name = "NameID",
+                ShortOp = "-ni",
+                LongOp = "--nameid",
+                Description =
+                    "Applies a unique ID based the file's name. (32 character limit)",
+                Flag = Options.NameID
+            },
+            new ConsoleOption
+            {
+                Name = "NameIDExt",
+                ShortOp = "-nie",
+                LongOp = "--nameidext",
+                Description =
+                    "Applies a unique ID based the file's name. (64 character limit)",
+                Flag = Options.NameIDExt
+            }
+        };
+
+        public static string assemblyPath = string.Empty;
+        private static bool AlwaysOverwrite;
+
+        public static Options options;
+
         [STAThread]
         private static void Main(string[] args)
         {
-            Console.ForegroundColor = ConsoleColor.Gray;
+            var codeBase = Assembly.GetExecutingAssembly().CodeBase;
+            var uri = new UriBuilder(codeBase);
+            assemblyPath = Path.GetFullPath(Uri.UnescapeDataString(uri.Path));
+
+            Console.ForegroundColor = ConsoleColor.DarkGray;
             Console.WriteLine("\nGeo BlazBlue Packer\nprogrammed by: Geo\n\n");
             Console.ForegroundColor = ConsoleColor.White;
 
-            var optionalArgs = ConsoleTools.GetOptionalParams(args).Select(p => p.ToLower()).ToArray();
-
-            args = ConsoleTools.GetParams(args);
+            ProcessOptions(args);
 
             try
             {
@@ -48,19 +87,6 @@ namespace GeoArcSysPACker
                         {
                             procedureType = (Procedure) Enum.Parse(typeof(Procedure), args[1]);
                         }
-                    }
-
-                    var optionalParams = new OptionParams();
-
-                    if (optionalArgs.Length > 0)
-                    {
-                        if (optionalArgs.Contains("-r") || optionalArgs.Contains("--recursive"))
-                            optionalParams |= OptionParams.Recursive;
-
-                        if (optionalArgs.Contains("-ni") || optionalArgs.Contains("--nameid"))
-                            optionalParams |= OptionParams.NameID;
-                        else if (optionalArgs.Contains("-nie") || optionalArgs.Contains("--nameidext"))
-                            optionalParams |= OptionParams.NameIDExt;
                     }
 
                     var path = Path.GetFullPath(args[0]);
@@ -90,9 +116,9 @@ namespace GeoArcSysPACker
                         }
 
                         var savePath = path + ".pac";
-                        var createExtNameID = optionalParams.HasFlag(OptionParams.NameIDExt);
+                        var createExtNameID = options.HasFlag(Options.NameIDExt);
 
-                        var createNameID = optionalParams.HasFlag(OptionParams.NameID) ||
+                        var createNameID = options.HasFlag(Options.NameID) ||
                                            createExtNameID;
                         var pacParams =
                             createExtNameID ? PACFileInfo.PACParameters.GenerateExtendedNameID :
@@ -110,7 +136,7 @@ namespace GeoArcSysPACker
 
                         var isDirectory = attr.HasFlag(FileAttributes.Directory);
 
-                        var isRecursive = optionalParams.HasFlag(OptionParams.Recursive);
+                        var isRecursive = options.HasFlag(Options.Recursive);
 
                         if (isRecursive)
                         {
@@ -163,7 +189,7 @@ namespace GeoArcSysPACker
                 }
                 else
                 {
-                    Console.WriteLine("Please input the path of a folder.");
+                    ShowUsage();
                 }
             }
             catch (Exception ex)
@@ -173,6 +199,90 @@ namespace GeoArcSysPACker
                 Console.WriteLine("Something went wrong!");
                 Console.ForegroundColor = ConsoleColor.White;
             }
+        }
+
+        public static void ProcessOptions(string[] args)
+        {
+            var newArgsList = new List<string>();
+
+            for (var i = 1; i < args.Length; i++)
+            {
+                var arg = args[i];
+                if (arg.First() != '-')
+                    continue;
+
+                newArgsList.Add(arg);
+
+                foreach (var co in ConsoleOptions)
+                    if (arg == co.ShortOp || arg == co.LongOp)
+                    {
+                        options |= (Options) co.Flag;
+                        if (co.HasArg)
+                        {
+                            var subArgsList = new List<string>();
+                            var lastArg = string.Empty;
+                            for (var j = i; j < args.Length - 1; j++)
+                            {
+                                var subArg = args[j + 1];
+
+                                if (subArg.First() == '-')
+                                    break;
+
+                                if (string.IsNullOrWhiteSpace(lastArg) || subArg.ToLower() != lastArg.ToLower())
+                                    subArgsList.Add(subArg);
+                                i++;
+                            }
+
+                            co.SpecialObject = subArgsList.ToArray();
+                        }
+                    }
+            }
+        }
+
+        public static bool OverwritePrompt(string file)
+        {
+            if (AlwaysOverwrite)
+                return true;
+
+            var firstTime = true;
+
+            while (true)
+            {
+                if (firstTime)
+                {
+                    Console.WriteLine($"\nThe file: {file} already exist. Do you want to overwrite it? Y/N/A");
+                    firstTime = false;
+                }
+
+                var overwrite = Convert.ToString(Console.ReadKey().KeyChar);
+                if (overwrite.ToUpper().Equals("Y"))
+                {
+                    Console.WriteLine();
+                    return true;
+                }
+
+                if (overwrite.ToUpper().Equals("N"))
+                {
+                    Console.WriteLine();
+                    return false;
+                }
+
+                if (overwrite.ToUpper().Equals("A"))
+                {
+                    Console.WriteLine();
+                    return AlwaysOverwrite = true;
+                }
+
+                ClearCurrentConsoleLine();
+            }
+        }
+
+        public static void ClearCurrentConsoleLine()
+        {
+            var currentLineCursor = Console.CursorTop;
+            Console.SetCursorPosition(0, Console.CursorTop);
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.SetCursorPosition(0, currentLineCursor);
         }
 
         public static void ProcessFile(VirtualFileSystemInfo vfsi, string baseDirectory, string saveFolder)
@@ -202,7 +312,7 @@ namespace GeoArcSysPACker
 
             if (File.Exists(savePath))
                 if (new FileInfo(savePath).Length > 0)
-                    if (!ConsoleTools.OverwritePrompt(savePath))
+                    if (!OverwritePrompt(savePath))
                         return;
 
             Directory.CreateDirectory(Path.GetDirectoryName(savePath));
@@ -234,6 +344,22 @@ namespace GeoArcSysPACker
             foreach (var d in Directory.GetDirectories(sDir)) stringList.AddRange(DirSearch(d));
 
             return stringList.ToArray();
+        }
+
+        private static void ShowUsage()
+        {
+            var shortOpMaxLength =
+                ConsoleOptions.Select(co => co.ShortOp).OrderByDescending(s => s.Length).First().Length;
+            var longOpMaxLength =
+                ConsoleOptions.Select(co => co.LongOp).OrderByDescending(s => s.Length).First().Length;
+
+            Console.WriteLine(
+                $"Usage: {Path.GetFileName(assemblyPath)} <file/folder path> [pack/unpack] [options...]");
+
+            Console.WriteLine("Options:");
+            foreach (var co in ConsoleOptions)
+                Console.WriteLine(
+                    $"{co.ShortOp.PadRight(shortOpMaxLength)}\t{co.LongOp.PadRight(longOpMaxLength)}\t{co.Description}");
         }
 
         private enum Procedure
