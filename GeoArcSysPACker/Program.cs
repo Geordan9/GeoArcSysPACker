@@ -10,12 +10,6 @@ namespace GeoArcSysPACker
 {
     internal class Program
     {
-        private enum Procedure
-        {
-            Pack = 0,
-            Unpack = 1
-        }
-
         [Flags]
         public enum OptionParams
         {
@@ -64,13 +58,9 @@ namespace GeoArcSysPACker
                             optionalParams |= OptionParams.Recursive;
 
                         if (optionalArgs.Contains("-ni") || optionalArgs.Contains("--nameid"))
-                        {
                             optionalParams |= OptionParams.NameID;
-                        }
                         else if (optionalArgs.Contains("-nie") || optionalArgs.Contains("--nameidext"))
-                        {
                             optionalParams |= OptionParams.NameIDExt;
-                        }
                     }
 
                     var path = Path.GetFullPath(args[0]);
@@ -154,11 +144,6 @@ namespace GeoArcSysPACker
                                 Console.WriteLine($"{mainPACFile.Name} is not a valid PAC file.");
                                 continue;
                             }
-                            else if (string.IsNullOrWhiteSpace(mainPACFile.Extension))
-                            {
-                                Console.WriteLine($"{mainPACFile.Name} has no extension.");
-                                continue;
-                            }
 
                             ProcessFile(mainPACFile, baseDirectory, saveFolder);
 
@@ -194,12 +179,14 @@ namespace GeoArcSysPACker
         {
             var extPathsList = new List<string>();
             extPathsList.Add(vfsi.GetPrimaryPath());
-            extPathsList.AddRange(vfsi.GetExtendedPaths());
+            extPathsList.AddRange(vfsi.GetExtendedPaths().Select(ep => Path.GetFileNameWithoutExtension(ep)));
             var extPaths = extPathsList.ToArray();
             extPaths[0] = extPaths[0].Replace(baseDirectory, string.Empty);
             var ext = vfsi.VirtualRoot.Extension;
             if (string.IsNullOrWhiteSpace(ext))
                 extPaths[0] += "_unpack";
+
+            if (!(vfsi is PACFileInfo)) extPaths[extPaths.Length - 1] = vfsi.Name;
 
             var extPath = string.Join("\\", extPaths);
             var savePath = Path.GetFullPath(saveFolder + extPath.Replace("?", "_"));
@@ -247,6 +234,12 @@ namespace GeoArcSysPACker
             foreach (var d in Directory.GetDirectories(sDir)) stringList.AddRange(DirSearch(d));
 
             return stringList.ToArray();
+        }
+
+        private enum Procedure
+        {
+            Pack = 0,
+            Unpack = 1
         }
     }
 }
