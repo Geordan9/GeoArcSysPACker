@@ -14,13 +14,23 @@ namespace GeoArcSysPACker
         [Flags]
         public enum Options
         {
-            Recursive = 0x1,
-            NameID = 0x2,
-            NameIDExt = 0x4
+            MinNameLength = 0x1,
+            Recursive = 0x2,
+            NameID = 0x4,
+            NameIDExt = 0x8
         }
 
         public static ConsoleOption[] ConsoleOptions =
         {
+            new ConsoleOption
+            {
+                Name = "Minimum Name Length",
+                ShortOp = "-mnl",
+                LongOp = "--minnamelength",
+                Description =
+                    "Specifies the minimum file name length. {Auto} will \n\t\t\tautomatically calculate it.",
+                Flag = Options.MinNameLength
+            },
             new ConsoleOption
             {
                 Name = "Recursive",
@@ -52,6 +62,7 @@ namespace GeoArcSysPACker
 
         public static string assemblyPath = string.Empty;
         private static bool AlwaysOverwrite;
+        private static int MinNameLength = 0;
 
         public static Options options;
 
@@ -124,7 +135,7 @@ namespace GeoArcSysPACker
                             createExtNameID ? PACFileInfo.PACParameters.GenerateExtendedNameID :
                             createNameID ? PACFileInfo.PACParameters.GenerateNameID : 0;
 
-                        File.WriteAllBytes(savePath, new PACFileInfo(path, pacParams).GetBytes());
+                        File.WriteAllBytes(savePath, new PACFileInfo(path, pacParams, MinNameLength).GetBytes());
                     }
                     else
                     {
@@ -161,7 +172,7 @@ namespace GeoArcSysPACker
 
                             if (!isRecursive) saveFolder = baseDirectory = Directory.GetParent(filePath).FullName;
 
-                            var mainPACFile = new PACFileInfo(filePath);
+                            var mainPACFile = new PACFileInfo(filePath, MinNameLength);
 
                             mainPACFile.Active = true;
 
@@ -190,6 +201,7 @@ namespace GeoArcSysPACker
                 else
                 {
                     ShowUsage();
+                    Pause();
                 }
             }
             catch (Exception ex)
@@ -237,52 +249,30 @@ namespace GeoArcSysPACker
                         }
                     }
             }
-        }
 
-        public static bool OverwritePrompt(string file)
-        {
-            if (AlwaysOverwrite)
-                return true;
-
-            var firstTime = true;
-
-            while (true)
+            foreach (var co in ConsoleOptions)
             {
-                if (firstTime)
-                {
-                    Console.WriteLine($"\nThe file: {file} already exist. Do you want to overwrite it? Y/N/A");
-                    firstTime = false;
-                }
+                if (co.Flag == null)
+                    continue;
 
-                var overwrite = Convert.ToString(Console.ReadKey().KeyChar);
-                if (overwrite.ToUpper().Equals("Y"))
+                if (co.HasArg)
                 {
-                    Console.WriteLine();
-                    return true;
+                    var subArgs = (string[])co.SpecialObject;
+                    if ((Options)co.Flag == Options.MinNameLength &&
+                        options.HasFlag(Options.MinNameLength))
+                    {
+                        int length;
+                        if (subArgs.Length > 0 && subArgs[0].ToLower() == "auto")
+                        {
+                            length = 0;
+                        }
+                        else if (subArgs.Length == 0 || !int.TryParse(subArgs[0], out length))
+                            length = 24;
+                        
+                        MinNameLength = length;
+                    }
                 }
-
-                if (overwrite.ToUpper().Equals("N"))
-                {
-                    Console.WriteLine();
-                    return false;
-                }
-
-                if (overwrite.ToUpper().Equals("A"))
-                {
-                    Console.WriteLine();
-                    return AlwaysOverwrite = true;
-                }
-
-                ClearCurrentConsoleLine();
             }
-        }
-
-        public static void ClearCurrentConsoleLine()
-        {
-            var currentLineCursor = Console.CursorTop;
-            Console.SetCursorPosition(0, Console.CursorTop);
-            Console.Write(new string(' ', Console.WindowWidth));
-            Console.SetCursorPosition(0, currentLineCursor);
         }
 
         public static void ProcessFile(VirtualFileSystemInfo vfsi, string baseDirectory, string saveFolder)
@@ -346,6 +336,52 @@ namespace GeoArcSysPACker
             return stringList.ToArray();
         }
 
+        public static bool OverwritePrompt(string file)
+        {
+            if (AlwaysOverwrite)
+                return true;
+
+            var firstTime = true;
+
+            while (true)
+            {
+                if (firstTime)
+                {
+                    Console.WriteLine($"\nThe file: {file} already exist. Do you want to overwrite it? Y/N/A");
+                    firstTime = false;
+                }
+
+                var overwrite = Convert.ToString(Console.ReadKey().KeyChar);
+                if (overwrite.ToUpper().Equals("Y"))
+                {
+                    Console.WriteLine();
+                    return true;
+                }
+
+                if (overwrite.ToUpper().Equals("N"))
+                {
+                    Console.WriteLine();
+                    return false;
+                }
+
+                if (overwrite.ToUpper().Equals("A"))
+                {
+                    Console.WriteLine();
+                    return AlwaysOverwrite = true;
+                }
+
+                ClearCurrentConsoleLine();
+            }
+        }
+
+        public static void ClearCurrentConsoleLine()
+        {
+            var currentLineCursor = Console.CursorTop;
+            Console.SetCursorPosition(0, Console.CursorTop);
+            Console.Write(new string(' ', Console.WindowWidth));
+            Console.SetCursorPosition(0, currentLineCursor);
+        }
+
         private static void ShowUsage()
         {
             var shortOpMaxLength =
@@ -360,6 +396,12 @@ namespace GeoArcSysPACker
             foreach (var co in ConsoleOptions)
                 Console.WriteLine(
                     $"{co.ShortOp.PadRight(shortOpMaxLength)}\t{co.LongOp.PadRight(longOpMaxLength)}\t{co.Description}");
+        }
+
+        private static void Pause()
+        {
+            Console.WriteLine("\rPress Any Key to exit...");
+            Console.ReadKey();
         }
 
         private enum Procedure
