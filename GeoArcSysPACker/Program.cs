@@ -67,7 +67,7 @@ namespace GeoArcSysPACker
                 Name = "Endianness",
                 ShortOp = "-en",
                 LongOp = "--endianness",
-                Description = "Specify the output file's endianness.",
+                Description = "Specify the output file's endianness. {LittleEndian|BigEndian}",
                 HasArg = true,
                 Flag = Options.Endianness
             },
@@ -163,8 +163,16 @@ namespace GeoArcSysPACker
                         createExtNameID ? PACFileInfo.PACParameters.GenerateExtendedNameID :
                         createNameID ? PACFileInfo.PACParameters.GenerateNameID : 0;
 
+                    if (File.Exists(savePath))
+                        if (new FileInfo(savePath).Length > 0)
+                            if (!OverwritePrompt(savePath))
+                                return;
+
+                    Console.WriteLine($"Packing {Path.GetFileNameWithoutExtension(savePath)} in {Enum.GetName(typeof(ByteOrder), endianness)}...");
+
                     File.WriteAllBytes(savePath,
                         new PACFileInfo(path, pacParams, MinNameLength, endianness).GetBytes());
+                    Console.WriteLine($"Successfully packed.");
                 }
                 else
                 {
@@ -223,7 +231,7 @@ namespace GeoArcSysPACker
 
                 Console.WriteLine();
                 Console.ForegroundColor = ConsoleColor.Green;
-                Console.WriteLine("Done!");
+                Console.WriteLine("Complete!");
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine();
             }
@@ -234,6 +242,7 @@ namespace GeoArcSysPACker
                 Console.WriteLine("Something went wrong!");
                 Console.ForegroundColor = ConsoleColor.White;
             }
+            Pause();
         }
 
         public static void ProcessOptions(string[] args)
@@ -342,11 +351,16 @@ namespace GeoArcSysPACker
 
             Directory.CreateDirectory(Path.GetDirectoryName(savePath));
 
+            Console.WriteLine($"Saving {vfsi.Name}...");
+
             File.WriteAllBytes(savePath, vfsi.GetBytes());
+
+            Console.WriteLine($"Successfully saved.");
         }
 
         public static VirtualFileSystemInfo[] RecursivePACExplore(PACFileInfo pfi, int level = 0)
         {
+            Console.WriteLine($"Searching {pfi.Name}...");
             var vfiles = new List<VirtualFileSystemInfo>();
             vfiles.AddRange(pfi.GetFiles());
 
@@ -378,6 +392,8 @@ namespace GeoArcSysPACker
 
             var firstTime = true;
 
+            var result = false;
+
             while (true)
             {
                 if (firstTime)
@@ -390,23 +406,36 @@ namespace GeoArcSysPACker
                 if (overwrite.ToUpper().Equals("Y"))
                 {
                     Console.WriteLine();
-                    return true;
+                    result = true;
+                    break;
                 }
 
                 if (overwrite.ToUpper().Equals("N"))
                 {
                     Console.WriteLine();
-                    return false;
+                    result = false;
+                    break;
                 }
 
                 if (overwrite.ToUpper().Equals("A"))
                 {
                     Console.WriteLine();
-                    return AlwaysOverwrite = true;
+                    result = true;
+                    AlwaysOverwrite = result;
+                    break;
                 }
-
-                ClearCurrentConsoleLine();
             }
+
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            ClearCurrentConsoleLine();
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            ClearCurrentConsoleLine();
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            ClearCurrentConsoleLine();
+            Console.SetCursorPosition(0, Console.CursorTop - 1);
+            ClearCurrentConsoleLine();
+
+            return result;
         }
 
         public static void ClearCurrentConsoleLine()
