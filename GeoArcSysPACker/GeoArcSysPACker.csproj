@@ -55,6 +55,7 @@
     <Compile Include="Models\ConsoleOptions.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utils\Dialogs.cs" />
     <Compile Include="Utils\Extensions\StringExtension.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -62,6 +63,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\Projects\WindowsAPICodePack\WindowsAPICodePack.csproj">
+      <Project>{45109b18-99d7-474c-8013-a9eb65643bd2}</Project>
+      <Name>WindowsAPICodePack</Name>
+    </ProjectReference>
     <ProjectReference Include="..\lib\ArcSysAPI\ArcSysAPI\ArcSysAPI.csproj">
       <Project>{78146821-fbc1-43af-b515-be2822cbbcbb}</Project>
       <Name>ArcSysAPI</Name>

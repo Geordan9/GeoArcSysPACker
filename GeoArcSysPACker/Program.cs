@@ -7,6 +7,7 @@ using ArcSysAPI.Common.Enums;
 using ArcSysAPI.Models;
 using GeoArcSysPACker.Models;
 using GeoArcSysPACker.Utils.Extensions;
+using static GeoArcSysPACker.Utils.Dialogs;
 
 namespace GeoArcSysPACker
 {
@@ -20,6 +21,8 @@ namespace GeoArcSysPACker
             NameID = 0x4,
             NameIDExt = 0x8,
             Endianness = 0x8000000,
+            Output = 0x10000000,
+            OverwriteMode = 0x20000000,
             Continue = 0x40000000
         }
 
@@ -73,6 +76,25 @@ namespace GeoArcSysPACker
             },
             new ConsoleOption
             {
+                Name = "Output",
+                ShortOp = "-o",
+                LongOp = "--output",
+                Description = "Specifies the output directory for the output files.",
+                HasArg = true,
+                Flag = Options.Output
+            },
+            new ConsoleOption
+            {
+                Name = "OverwriteMode",
+                ShortOp = "-om",
+                LongOp = "--overwritemode",
+                Description =
+                    "Specify whether to overwrite or skip all already existing\n\t\t\tfiles. {Overwrite|Skip}",
+                HasArg = true,
+                Flag = Options.OverwriteMode
+            },
+            new ConsoleOption
+            {
                 Name = "Continue",
                 ShortOp = "-c",
                 LongOp = "--continue",
@@ -82,11 +104,12 @@ namespace GeoArcSysPACker
         };
 
         public static string assemblyPath = string.Empty;
-        private static bool AlwaysOverwrite;
         private static int MinNameLength;
 
         public static Options options;
         public static ByteOrder endianness = ByteOrder.LittleEndian;
+        private static OverwriteMode overwriteMode = OverwriteMode.Default;
+        public static string outputPath = string.Empty;
 
         [STAThread]
         private static void Main(string[] args)
@@ -115,16 +138,16 @@ namespace GeoArcSysPACker
 
                 if (args.Length > 1)
                 {
-                    args[1] = args[1].ToLower().FirstCharToUpper();
                     byte b;
+                    Procedure p;
                     if (byte.TryParse(args[1], out b))
                     {
                         if (b <= 1)
                             procedureType = (Procedure) b;
                     }
-                    else if (Enum.IsDefined(typeof(Procedure), args[1]))
+                    else if (Enum.TryParse(args[1], true, out p))
                     {
-                        procedureType = (Procedure) Enum.Parse(typeof(Procedure), args[1]);
+                        procedureType = p;
                     }
                 }
 
@@ -140,6 +163,7 @@ namespace GeoArcSysPACker
                     Console.ForegroundColor = ConsoleColor.Red;
                     Console.WriteLine($"Can't retrieve \"{path}\" file system attributes.");
                     Console.ForegroundColor = ConsoleColor.White;
+                    Pause();
                     return;
                 }
 
@@ -155,6 +179,8 @@ namespace GeoArcSysPACker
                     }
 
                     var savePath = path + ".pac";
+                    if (!string.IsNullOrWhiteSpace(outputPath))
+                        savePath = Path.Combine(outputPath, Path.GetFileName(savePath));
                     var createExtNameID = options.HasFlag(Options.NameIDExt);
 
                     var createNameID = options.HasFlag(Options.NameID) ||
@@ -168,11 +194,12 @@ namespace GeoArcSysPACker
                             if (!OverwritePrompt(savePath))
                                 return;
 
-                    Console.WriteLine($"Packing {Path.GetFileNameWithoutExtension(savePath)} in {Enum.GetName(typeof(ByteOrder), endianness)}...");
+                    Console.WriteLine(
+                        $"Packing {Path.GetFileNameWithoutExtension(savePath)} in {Enum.GetName(typeof(ByteOrder), endianness)}...");
 
                     File.WriteAllBytes(savePath,
                         new PACFileInfo(path, pacParams, MinNameLength, endianness).GetBytes());
-                    Console.WriteLine($"Successfully packed.");
+                    Console.WriteLine("Successfully packed.");
                 }
                 else
                 {
@@ -190,6 +217,8 @@ namespace GeoArcSysPACker
                     {
                         baseDirectory = path;
                         saveFolder = baseDirectory + "_unpack";
+                        if (!string.IsNullOrWhiteSpace(outputPath))
+                            saveFolder = Path.Combine(outputPath, Path.GetFileName(saveFolder));
                     }
 
                     if (isRecursive && isDirectory)
@@ -242,6 +271,7 @@ namespace GeoArcSysPACker
                 Console.WriteLine("Something went wrong!");
                 Console.ForegroundColor = ConsoleColor.White;
             }
+
             Pause();
         }
 
@@ -315,6 +345,62 @@ namespace GeoArcSysPACker
                             endianness = ByteOrder.LittleEndian;
                         }
                     }
+
+                    if ((Options) co.Flag == Options.OverwriteMode &&
+                        options.HasFlag(Options.OverwriteMode))
+                    {
+                        if (subArgs.Length > 0)
+                        {
+                            OverwriteMode om;
+                            if (Enum.TryParse(subArgs[0], true, out om)) overwriteMode = om;
+                        }
+                        else
+                        {
+                            overwriteMode = OverwriteMode.Default;
+                        }
+                    }
+
+                    if ((Options) co.Flag == Options.Output &&
+                        options.HasFlag(Options.Output))
+                    {
+                        if (subArgs.Length == 0)
+                        {
+                            subArgs = new string[1];
+                            subArgs[0] = OpenFolderDialog("Select output folder...");
+                        }
+
+                        foreach (var arg in subArgs)
+                        {
+                            var subArg = Path.GetFullPath(arg.Replace("\"", "\\"));
+                            if (subArgs.Length > 1)
+                                WarningMessage(
+                                    $"Too many arguments for output path. Defaulting to \"{subArg}\"...");
+                            outputPath = Path.GetFullPath(subArg);
+                            break;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(outputPath))
+                        {
+                            if (subArgs.Length > 1)
+                                WarningMessage(
+                                    "None of the given output paths exist or could be created. Ignoring...");
+                            else if (subArgs.Length == 1)
+                                WarningMessage(
+                                    "Given output path does not exist. Ignoring...");
+                            else if (subArgs.Length == 0)
+                                WarningMessage(
+                                    "No output path was given. Ignoring...");
+                        }
+                        else
+                        {
+                            if (!Directory.Exists(outputPath))
+                            {
+                                WarningMessage(
+                                    "Given output path does not exist. Ignoring...");
+                                outputPath = string.Empty;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -355,7 +441,7 @@ namespace GeoArcSysPACker
 
             File.WriteAllBytes(savePath, vfsi.GetBytes());
 
-            Console.WriteLine($"Successfully saved.");
+            Console.WriteLine("Successfully saved.");
         }
 
         public static VirtualFileSystemInfo[] RecursivePACExplore(PACFileInfo pfi, int level = 0)
@@ -387,8 +473,13 @@ namespace GeoArcSysPACker
 
         public static bool OverwritePrompt(string file)
         {
-            if (AlwaysOverwrite)
-                return true;
+            switch (overwriteMode)
+            {
+                case OverwriteMode.Overwrite:
+                    return true;
+                case OverwriteMode.Skip:
+                    return false;
+            }
 
             var firstTime = true;
 
@@ -421,19 +512,10 @@ namespace GeoArcSysPACker
                 {
                     Console.WriteLine();
                     result = true;
-                    AlwaysOverwrite = result;
+                    overwriteMode = OverwriteMode.Overwrite;
                     break;
                 }
             }
-
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            ClearCurrentConsoleLine();
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            ClearCurrentConsoleLine();
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            ClearCurrentConsoleLine();
-            Console.SetCursorPosition(0, Console.CursorTop - 1);
-            ClearCurrentConsoleLine();
 
             return result;
         }
@@ -444,6 +526,23 @@ namespace GeoArcSysPACker
             Console.SetCursorPosition(0, Console.CursorTop);
             Console.Write(new string(' ', Console.WindowWidth));
             Console.SetCursorPosition(0, currentLineCursor);
+        }
+
+        private static void ConsoleMessage(string message, ConsoleColor color, string messageType)
+        {
+            Console.ForegroundColor = color;
+            Console.WriteLine($"[{messageType}] {message}");
+            Console.ForegroundColor = ConsoleColor.White;
+        }
+
+        private static void InfoMessage(string message)
+        {
+            ConsoleMessage(message, ConsoleColor.Blue, "INFO");
+        }
+
+        private static void WarningMessage(string message)
+        {
+            ConsoleMessage(message, ConsoleColor.DarkYellow, "WARNING");
         }
 
         private static void ShowUsage()
@@ -475,6 +574,13 @@ namespace GeoArcSysPACker
         {
             Pack = 0,
             Unpack = 1
+        }
+
+        private enum OverwriteMode
+        {
+            Default = 0,
+            Overwrite = 1,
+            Skip = 2
         }
     }
 }
